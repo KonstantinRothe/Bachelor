@@ -39,10 +39,6 @@ def getSummaries():
                 soup = BeautifulSoup(page, "html.parser")
                 
                 #get all game names. these may be inside of <li> tags but are definetly marked by <b> tags. 
-                #because walter is a **** that doesnt understand common sense and programming he sometimes has the last (or even more?) 
-                #line of his report in the same <li> tag as the matchup (team names + scores)
-                #I have to get all the text between the first and last <b> [Team] [Score], [Team] [Score] </b>, no matter in which list item they are stored
-                #saves the semi-useful texts of the website to a file, hopefully this works for every paeg...
                 fulltext = ""
                 f =  open("reviews20{:02d}w{:02d}.txt".format(year, week), "w")
                 for el in soup.find_all('div', id="MainContentBlock"):
@@ -64,7 +60,7 @@ def format(filename):
     for line in f:
         #this is to keep the matchup as a separator
         l = strip_tags(line)
-        #after this there may be some leftover shit-html because the code from walterfootball really sucks 
+
         l = re.sub(".+>", '', l)
         l = re.sub("^.*'\);", '', l)
 
@@ -118,7 +114,6 @@ def stripFile(filename):
     n.close()
 
 def removeClutter(filename):
-    '''My fucking god this website is literally the worst piece of software I ever had to see'''
     f = open(filename, 'r').read()
     bsRegex = r"For thoughts on (.|\n)*'\);"  
     bs2Regex = r"For thoughts on .*$"
@@ -130,15 +125,14 @@ def removeClutter(filename):
     newFile.write(n)
     newFile.close()
     print("Done removing clutter from {}".format(filename))
-#getSummaries()
-#format("reviews2008w01.txt")
 
+getSummaries()
 
-#for file in glob.glob('unformatted\\'+"*.txt"):
-#    format(file)
+for file in glob.glob('unformatted\\'+"*.txt"):
+    format(file)
 
-#for file in glob.glob('formatted\\'+"*.txt"):
-#    stripFile(file)
+for file in glob.glob('formatted\\'+"*.txt"):
+    stripFile(file)
 
 for file in glob.glob('stripped\\'+"*.txt"):
     removeClutter(file)
