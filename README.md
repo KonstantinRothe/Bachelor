@@ -1,8 +1,8 @@
 # Bachelor
 Praktischer Anteil meiner Bachelorarbeit
 Um das Framework nutzen zu können, muss das Data2Text Modell https://github.com/gongliym/data2text-transformer/ heruntergeladen werden.
-Folgen Sie den Schritten, die vom Modell vorgegeben werden, zur Erzeugung von NFL Spielberichten verwenden Sie die hier gegebene data_extract.py.
-Die Generalisierte Datenvorverarbeitung ist UDE.py (noch nicht voll funktionsfähig). Mit dieser können Daten die der newformat.json Struktur folgen verwendet werden.
+Das Starten von Framework.py ermöglicht die Datenvorverarbeitung in einem Schritt, da es intern die benötigten Scripte mit den gegebenen Parametern ausführt.
+Damit können Daten die der newformat.json Struktur folgen verwendet werden.
 
 [
   {
