@@ -94,7 +94,84 @@ JSON General Data Format:
 ## AUSGABEN: .gtable,.summary, .orig_summary, .links, .gtable_label, .summary_label
 ##         
 
+def get_entities_from_group(entry, group):
+    ret = []
+    for _id in group:
+        for entity in entry[ENTITIES_KEY]:
+            if entry[ENTITIES_KEY][entity][UNIQUE_IDENTIFIER] == _id:
+                ret.append(entry[ENTITIES_KEY][entity])
+    assert len(group) == len(ret)
+    return ret
+
+def get_group_data(entry, group_ids):
+    ret = []
+    for group in entry[GROUPS_KEY]:
+        if entry[GROUPS_KEY][group][UNIQUE_IDENTIFIER] in group_ids:
+            ret.append(entry[GROUPS_KEY][group])
+    assert len(group_ids) == len(ret)
+    return ret
+
 def create_record_data(json_data):
+    ret = []
+    for entry in json_data:
+        records = []
+        entity_attributes, group_attributes = get_all_attributes(entry)
+        grouped_entities = get_entity_index(entry)
+        biggest_group_size = bgs(grouped_entities)
+        #create entity record data
+        for g in grouped_entities.keys():
+            e_list = get_entities_from_group(entry, grouped_entities[g])
+            assert len(e_list) <= biggest_group_size
+            
+            for i in range(biggest_group_size):
+
+                for attribute in entity_attributes:
+                    if attribute == FEATURE_KEY:
+                        continue
+                    try:
+                        entity = e_list[i]
+                        try:
+                            _id = entity[UNIQUE_IDENTIFIER]
+                            val = entity[attribute]
+                            features_string = '/'.join(feat for feat in entity[FEATURE_KEY])
+
+                            if isinstance(val, list):
+                                val = '/'.join(v for v in val)
+                            else:
+                                val = entity[attribute].replace(" ", "_")
+                            record_string = '{}|{}|{}|{}'.format(_id, attribute, val, features_string)
+                        except KeyError:
+                            record_string = '{}|{}|{}|{}'.format(_id, attribute, "N/A", features_string)
+                    except IndexError:
+                        _id = "N/A"
+                        val = "N/A"
+                        features_string = "N/A"
+                        record_string = '{}|{}|{}|{}'.format(_id, attribute, val, features_string)
+                    records.append(record_string)
+                        
+        #create group record data. It need to iterate a second time over the keys, because the group records
+        #have to show up after the entity records in the final table and I couldnt think of a better solution >.<
+        group_list = get_group_data(entry, grouped_entities.keys())
+        for group in group_list:
+            _id = group[UNIQUE_IDENTIFIER]
+            for attribute in group_attributes:
+                if attribute == FEATURE_KEY:
+                    continue
+                try:    
+                    val = group[attribute]
+                    if isinstance(val, list):
+                        val = '/'.join(v for v in val)
+                    else:
+                        val = group[attribute].replace(" ", "_")
+                    record_string = '{}|{}|{}|{}'.format(_id, attribute, val, features_string)
+                except KeyError:
+                    record_string = '{}|{}|{}|{}'.format(_id, attribute, "N/A", features_string)
+
+                records.append(record_string)
+        ret.append(records)
+    return ret
+
+def create_record_data1(json_data):
     '''
     Creates a record of the form entity_id|attribute|value|features
     for each entity, group and non-entity information piece in each game 
@@ -104,10 +181,12 @@ def create_record_data(json_data):
     for entry in json_data:
         records = []
         #record_string = '{}|{}|{}|{}'
+        #the table has to contain each entity and group and each entity/group attribute matched
+        #to them, no matter if they actually *have* each attribtue. this will build the
+        #internal table realization
+
         for _dict in entry:
-            if _dict == SUMMARY_KEY:
-                continue
-            elif _dict == NON_ENTITY_RECORDS_KEY:
+            if _dict == NON_ENTITY_RECORDS_KEY:
                 #create records for non entities
                 for attribute in entry[_dict]:
                     record_string = '{}|{}|{}|{}'.format('N/A', attribute, entry[_dict][attribute], 'N/A')
@@ -122,17 +201,21 @@ def create_record_data(json_data):
                     idx = entry[_dict][entity][UNIQUE_IDENTIFIER]
                     #get attributes and values
                     for attribute in entry[_dict][entity]:
-                        #skip features, because we catch them earlier
+                        #skip features, because we caught them earlier
                         if attribute == FEATURE_KEY:
                             continue
-                        #if attribute is a list, we make a new record for each list element
+                        #if attribute is a list, make a new record for each list element
                         if isinstance(entry[_dict][entity][attribute], list):
                             for attr in entry[_dict][entity][attribute]:
                                 record_string = '{}|{}|{}|{}'.format(idx, attribute, attr, features_string)
                         else:
-                            record_string = '{}|{}|{}|{}'.format(idx, attribute, entry[_dict][entity][attribute], features_string)
+                            #safety replace all whitespaces with underscores
+                            val = entry[_dict][entity][attribute].replace(' ', '_')
+                            record_string = '{}|{}|{}|{}'.format(idx, attribute, val, features_string)
                             records.append(record_string)
-                        #print(record_string)      
+                        #print(record_string)  
+            else: #for example summary
+                continue
         ret.append(records)
     return ret      
 
@@ -209,11 +292,8 @@ def get_entity_index(entry): #done?
     '''
     Returns a list of lists, one list per group, which contain the IDs of the entities
     that belong to this group
-
-    TODO: 
-    ++ Figure out a way to make an entity be part of two different groups
     '''
-    ret = []
+    ret = dict()
 
     for group in entry[GROUPS_KEY].keys():
         g_list = []
@@ -221,7 +301,7 @@ def get_entity_index(entry): #done?
         for ent in entry[ENTITIES_KEY].keys():
             if(g_key in entry[ENTITIES_KEY][ent][GROUPING_KEY]):
                 g_list.append(entry[ENTITIES_KEY][ent][UNIQUE_IDENTIFIER])
-        ret.append(g_list)
+        ret[g_key] = g_list
     return ret
 
 def get_all_attributes(entry):
@@ -230,7 +310,7 @@ def get_all_attributes(entry):
     '''
     all_entity_attributes = set()
     all_group_attributes = set()
-    counter = 0
+    
     for group in entry[GROUPS_KEY]:
         for key in entry[GROUPS_KEY][group].keys():
             all_group_attributes.add(key)
@@ -238,14 +318,17 @@ def get_all_attributes(entry):
         for key in entry[ENTITIES_KEY][entity].keys():
             all_entity_attributes.add(key)
 
-    return list(all_entity_attributes), list(all_group_attributes)
+    return sorted(list(all_entity_attributes)), sorted(list(all_group_attributes))
 
 def get_group_list(entry):
     groups = set()
     for group in entry[GROUPS_KEY]:
-        groups.add(entry[GROUPS_KEY][groups][UNIQUE_IDENTIFIER])
-    return list(groups)
+        groups.add(entry[GROUPS_KEY][group][UNIQUE_IDENTIFIER])
+    return sorted(list(groups))
 
+def bgs(grouped_entity_dict):
+    '''Returns the max amount of entities in a single group.'''
+    return max(len(each) for each in grouped_entity_dict.values())
 
 def convert_links(json_data, links):
     '''
@@ -260,41 +343,58 @@ def convert_links(json_data, links):
     
     for entry, links in zip(json_data, links):
         all_entity_attributes, all_group_attributes = get_all_attributes(entry)
-        grouped_entity_lists = get_entity_index(entry)
+        grouped_entity_dict = get_entity_index(entry)
         group_list = get_group_list(entry)
+        biggest_group_size = bgs(grouped_entity_dict) 
+
         entry_align = []
         for each_link in links:
-            s_idx, e_idx, identifier, attribute = each_link
-            #calculate offsets
-            #entry offsets:
-            #starts with entities
-            #offset increases for each attribute (all unique attributes for an entry are considered)
-            #the entities are "sorted" by group --> entities of the first group appear first
-            #last entry has offset of #entities * #entity attributes * #groups
-            #after each entity has its offset, go on with groups
-            #starts after #entities * #entity attributes * #groups + 1
-            #each groups attributes are considered
-            #--> #groups * (_total entity offset_ * #group attributes) + 1
-            #key_offset determines the attribute position in the table
-            if identifier.startswith("e") # = entity
-               key_offset = all_entity_attributes.index(attribute)
-               if identifier[1:] in grouped_entity_list[0]:
-                  entry_offset = entity_list.index(identifier) * len(all_entity_attributes)
-               else:
-                  entry_offset = (len(entity_list) + entity_list.index(identifier)) * len(all_entity_attributes)
-            
-            if identifier.startswith("g"): # = group
-               key_offset = all_group_attributes.index(attribute)
-               if identifier == group_list[0]:
-                  entry_offset = len(group_list) * len(entity_list) * len(all_entity_attributes) + 1
-               else:
-                   entry_offset = len(group_list) * (len(entity_list) * len(all_entity_attributes) + len(all_group_attributes)) + 1
+            start_index, end_index, identifier, attribute = each_link
+            _id = identifier[1:]
+            #offsets represent the position of a reference to an entity/group - attribute pair in the data
+            #|    independent  |||         entities w/o group         |||       entities in group 0          |||        entities in group 1         |||     group attributes  |
+            #|                 |||     entity 3    ||       ...       |||     entity 0    ||     entity 1    |||     entity 1    ||     entity 2    |||  group 0  |  group 1  |
+            #| iA0 | ... | iA3 ||| eA0 | ... | eA5 || ... | ... | ... ||| eA0 | ... | eA5 || ... | ... | ... ||| eA0 | ... | eA5 || eA0 | ... | eA5 ||| gA0 | gA1 | gA0 | gA2 |
 
+            # eA0 here is the first entity attribute (here: 5 total)
+            # gA0 is the first group attribute (here: 2 total)
+            #entities that appear in more than one group get more than one entry
+            #entity entries are grouped by groups (duh!) and sorted by index in group
+
+            #offset is calculated as: max_amount_of_entity_attributes * (group_index * biggest_group_size + entity_index)
+            #eg entity (idx 0) in group (idx 0), max 5 attributes and max 3 entities per group:
+            # 5 * (0 * 3 + 0) = 0 --> of course the first entity doesnt need an offset
+            # entity (idx 1) in group (idx 0), ...
+            # 5 * (0 * 3 + 1) = 5 --> needs offset of 5 because these entries are occupied by entity idx 0 
+            # entity (idx 2) in group (idx 1), ...
+            # 5 * (1 * 3 + 2) = 25
+            if identifier.startswith("e"): # entity
+                key_offset = all_entity_attributes.index(attribute)
+                for group in group_list:
+                    current_group = grouped_entity_dict[str(group)]
+                    if _id in current_group:
+                        group_index = group_list.index(group)
+                        entity_index = current_group.index(_id)
+                        entry_offset = len(all_entity_attributes) * (group_index * biggest_group_size + entity_index)
+
+            #group indices directly follow entity indices
+            #base_offset = amount_of_groups * biggest_group_size * amount_of_entity_attributes
+            #the entry offset = base_offset + group_index * amount_of_group_attributes
+            #eg 2 groups, max 3  entities, each has 5 attributes
+            #base_offset = 2 * 3 * 5 = 30
+            #group idx 0, 3 group attributes
+            #entry_offset = 30 + 0 * 3 = 30 --> first group, no further offset needed
+            #group idx 1, ...
+            #entry_offset = 30 + 1 * 3 = 33 --> first group needs 3 spaces for its attributes
+            if identifier.startswith("g"): # group
+                key_offset = all_group_attributes.index(attribute)
+                group_index = group_list.index(_id)
+                base_offset = len(group_list) * biggest_group_size * len(all_entity_attributes)
+                entry_offset = base_offset + group_index * len(all_group_attributes)
             index_in_table = entry_offset + key_offset
 
-            links_str = "{}:{}-{}".format(s_idx, e_idx, index_in_table)
+            links_str = "{}:{}-{}".format(start_index, end_index, index_in_table)
             entry_align.append(links_str)
-
         alignments.append(entry_align)
     return alignments        
 
@@ -404,7 +504,6 @@ def get_links(entry, summary_entities, summary_numbers):
                                 links.add((ent_start_idx, ent_end_idx, entity_type, attribute))
     return list(links)
 
-
 def extract_links(json_data, summary_list, entity_id_list, verbose=False):
     '''
     Extract a list of links which correlate the given records (entities, groups, etc) with 
@@ -428,24 +527,64 @@ def extract_links(json_data, summary_list, entity_id_list, verbose=False):
             sent_links = get_links(entry, summary_entities, summary_numbers) #done ? 
 
             for each in sent_links:
-                s_idx, e_idx, entry_key, type_key = each
-                s_idx = sent_start_token_index + s_idx
-                e_idx = sent_start_token_index + e_idx
-                links.add((s_idx, e_idx, entry_key, type_key))
+                start_index, end_index, entry_key, type_key = each
+                start_index = sent_start_token_index + start_index
+                end_index = sent_start_token_index + end_index
+                links.add((start_index, end_index, entry_key, type_key))
             sent_start_token_index += len(sent_words)
         link_list.append(links)
 
     return link_list
 
 def extract_labels(table_list, final_links, summary_list, verbose=False):
+    '''
+    Unpacks the table information (created before via convert_links) and summary information into two 
+    Lists of 0's and 1's for each entry. 
+    '''
+    assert len(table_list) == len(final_links) == len(summary_list) #allow for more summaries
     table_labels_list = []
     summary_labels_list = []
 
+    for table, links, summary_content in zip(table_list, final_links,  summary_list):
+        table_contents = [each.split('|')[2] for each in table]
+        #print(table_contents)
+        table_size = len(table_contents)
+        summary_size = len(summary_content)
+        selected_content_set = set()
+        summary_entities_set = set()
+
+        for link in links:
+            parts = link.strip().split('-')
+            assert len(parts) == 2
+            position_in_table = int(parts[1])
+
+            indices = parts[0].strip().split(':')
+            assert len(indices) == 2
+            from_index = int(indices[0])
+            to_index = int(indices[1])
+
+            assert position_in_table < table_size, "Pos {} Size {}".format(position_in_table, table_size)
+            selected_content_set.add(position_in_table)
+
+            for idx in range(from_index, to_index):
+                assert idx < summary_size, idx
+                summary_entities_set.add(idx)
+    
+        table_labels = [0] * table_size
+        for each in selected_content_set:
+            table_labels[each] = 1
+
+        summary_labels = [0] * summary_size
+        for each in summary_entities_set:
+            summary_labels[each] = 1
+
+        table_labels_list.append([str(label) for label in table_labels])
+        summary_labels_list.append([str(label) for label in summary_labels])
     return table_labels_list, summary_labels_list
 
 def main(args):
     
-    json_data = json.load(open("scripts/newformat.json", "r"))
+    json_data = json.load(open("newformat.json", "r"))
     table_list = create_record_data(json_data) #done!
 
     summary_list = extract_summary_list(json_data) #done?
@@ -457,80 +596,46 @@ def main(args):
     final_links= convert_links(json_data, links)
 
     table_labels_list, summary_labels_list = extract_labels(table_list, final_links, summary_list)
-    print(entity_id_list)
 
+    #save all the funny files
+    with open(args.output + ".gtable", "w") as outf:
+        for game in table_list:
+            assert all([len(item.split('|')) == 4 for item in game])
+            outf.write("{}\n".format(' '.join(game)))
+    outf.close()
+    print("Wrote gtable!")
 
-def main1(args):
-    '''
-    Start data preprocessing for general data.
-    This will return 
-    - a .gtable file which contains the record data ( entity|attribute|value|features )
-    - a .summary file which equals the summary with concatenated entity names (e.g. firstname_lastname)
-    - a .orig_summary file which equals the summary without concatened entity names (e.g. firstname lastname)
-    - a .links file which
+    with open(args.output + ".summary", "w") as outf:
+        for summary in summary_list:
+            outf.write("{}\n".format(' '.join(summary)))
+    outf.close()
+    print("Wrote summary!")
 
-    TODO:
-    +++ Copy missing functions
-    +++ Test if preprocessing results in equal files
-    ++  allow to define constants 
-    ++  add comments which explain each step
-    +   allow for multiple summaries per data field
-    +   resolve other TODOs
+    with open(args.output + ".orig_summary", "w") as outf:
+        for entry in json_data:
+            outf.write("{}\n".format(' '.join(entry[SUMMARY_KEY])))
+    outf.close()
+    print("Wrote orig summary!")
 
-    '''
-    json_data = json.load(open(args.data, 'r'))
+    with open(args.output + ".links", "w") as outf:
+        for links in final_links:
+            out_line = ' '.join(sorted(links, key = lambda x:int(x[:x.index(':')])))
+            outf.write("{}\n".format(out_line))
+    outf.close()
+    print("Wrote links!")
 
-    summary_key = 'summary'
+    with open(args.output + ".gtable_label", 'w') as outf:
+        for table_labels in table_labels_list:
+            outf.write("{}\n".format(' '.join(table_labels)))
+    outf.close()
+    print("Wrote gtable label!")
 
-    # convert json to table
-    #jedes Spiel hat einen Eintrag in der table_list (57)
-    table_list = extract_tables(json_data)
-
-    # get summary
-    if not args.test_mode:
-        entity_dict = extract_entities(json_data)
-        summary_list = extract_summary(json_data, summary_key, entity_dict)
-        assert len(table_list) == len(summary_list)
-
-        game_entity_list = extract_game_entities(json_data)
-        assert len(table_list) == len(game_entity_list)
-        links = extract_links(json_data, summary_list, game_entity_list, args.verbose)
-        assert len(table_list) == len(links)
-        final_links = convert_links(json_data, links)
-
-        table_labels_list, summary_labels_list = extract_labels(table_list, final_links, summary_list, args.verbose)
-
-        with open(args.output + ".gtable", "w") as outf:
-            for game in table_list:
-                assert all([len(item.split('|')) == 4 for item in game])
-                outf.write("{}\n".format(' '.join(game)))
-        outf.close()
-
-        with open(args.output + ".summary", "w") as outf:
-            for summary in summary_list:
-                outf.write("{}\n".format(' '.join(summary)))
-        outf.close()
-
-        with open(args.output + ".orig_summary", "w") as outf:
-            for game in json_data:
-                outf.write("{}\n".format(' '.join(game[summary_key])))
-        outf.close()
-
-        with open(args.output + ".links", "w") as outf:
-            for links in final_links:
-                out_line = ' '.join(sorted(links, key = lambda x:int(x[:x.index(':')])))
-                outf.write("{}\n".format(out_line))
-        outf.close()
-
-        with open(args.output + ".gtable_label", 'w') as outf:
-            for table_labels in table_labels_list:
-                outf.write("{}\n".format(' '.join(table_labels)))
-        outf.close()
-
-        with open(args.output + ".summary_label", 'w') as outf:
-            for summary_labels in summary_labels_list:
-                outf.write("{}\n".format(' '.join(summary_labels)))
-        outf.close()
+    with open(args.output + ".summary_label", 'w') as outf:
+        for summary_labels in summary_labels_list:
+            outf.write("{}\n".format(' '.join(summary_labels)))
+    outf.close()
+    print("Wrote summary label!")
+    print("Data Extraction Done!")
 
 if __name__ == '__main__':
     readme = """
@@ -539,7 +644,6 @@ if __name__ == '__main__':
     parser.add_argument("-d", "--data",   required=True, help = "json data")
     parser.add_argument("-o", "--output", required=True, help = "output prefix")
     parser.add_argument('-v', "--verbose", action='store_true', help = "verbose")
-    parser.add_argument("-test_mode", default=False, help="testing mode, duh")
     parser.add_argument("-language", default="English", help="Language of your summaries")
     args = parser.parse_args()
 
