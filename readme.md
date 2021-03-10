@@ -5,7 +5,7 @@ You can either define your own data preprocessing programs or use the ones that 
 The model that is included is the [DataText Transformer Model by gongliym](https://github.com/gongliym/data2text-transformer/).
 The included data_extract.py is based on the data_extract provided with the gongliym Transformer, but instead of preprocessing NBA Data it allows you to use NFL Data with the same format.
 Furthermore the UDE.py is the Universal Data Extraction, which should allow you to preprocess any kind of data as long as it follows the format provided by newformat.json,
-which should make creating readable datasets more general, easier and more accessible.
+which should make creating readable datasets more general, easier and more accessible. (For format see data/Testing Data/newformat.json)
 
 # Usage
 Define the parameters for the model you're going to use in model_params.cfg. The parametes and values for them have to be separated by a comma; separation with newlines is
