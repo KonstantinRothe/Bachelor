@@ -171,15 +171,15 @@ def check_dependencies():
     print("Checking dependencies...")
 
 def main(args):
-    #data_extraction(args)
+    data_extraction(args)
 
-    #vocab_extraction(args)
+    vocab_extraction(args)
 
     if args.split_data:
         split_train_valid_data(args)
     binarize_data(args)
 
-    #start_model(args)
+    start_model(args)
 
 if __name__ == '__main__':
     readme = """
