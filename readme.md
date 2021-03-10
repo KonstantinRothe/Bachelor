@@ -11,6 +11,7 @@ which should make creating readable datasets more general, easier and more acces
 Define the parameters for the model you're going to use in model_params.cfg. The parametes and values for them have to be separated by a comma; separation with newlines is
 just for the readability and can be omitted.
 To use the framework, simply start Data2Text.py. By default it will start the data extraction for the small_NFL dataset, then extract the vocabulary, split the data into training and validation sets, binarize the data to be a viable input for the model and then start the model with this data.
+To use the NFL Dataset you have to extract the dataset from data/NFL Crawl/final data/NFL.rar and start Data2Text.py with the parameters ```-data_extractor scripts/data_extract.py -data [NFL.json file location]```.
 
 # Parameters
 ```
